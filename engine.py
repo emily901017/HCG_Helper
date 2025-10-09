@@ -3,17 +3,21 @@ RAG Pipeline Engine for HGC Helper
 Implements hybrid retrieval, reranking, and LLM generation
 """
 import chromadb
-from llama_index.core import VectorStoreIndex, StorageContext, Settings
+from llama_index.core import VectorStoreIndex, StorageContext, Settings, get_response_synthesizer
+from llama_index.core.prompts import PromptTemplate
 from llama_index.vector_stores.chroma import ChromaVectorStore
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.llms.openai import OpenAI
 # from llama_index.llms.gemini import Gemini
 from llama_index.core.retrievers import VectorIndexRetriever
+from llama_index.retrievers.bm25 import BM25Retriever
 from llama_index.core.query_engine import RetrieverQueryEngine
 from llama_index.core.postprocessor import SimilarityPostprocessor
+from llama_index.core.schema import NodeWithScore
 import cohere
 import config
 from database import QueryLogger
+from typing import List
 
 
 class RAGEngine:
@@ -80,6 +84,20 @@ class RAGEngine:
             storage_context=storage_context
         )
 
+        # Get all nodes from the vector store for BM25
+        # We need to retrieve all documents to build BM25 index
+        all_node_dicts = collection.get(include=['metadatas', 'documents'])
+        from llama_index.core.schema import TextNode
+
+        self.all_nodes = []
+        for i, doc_id in enumerate(all_node_dicts['ids']):
+            node = TextNode(
+                text=all_node_dicts['documents'][i],
+                id_=doc_id,
+                metadata=all_node_dicts['metadatas'][i] if all_node_dicts['metadatas'] else {}
+            )
+            self.all_nodes.append(node)
+
     def _setup_reranker(self):
         """Set up Cohere reranker"""
         if config.COHERE_API_KEY:
@@ -87,6 +105,56 @@ class RAGEngine:
         else:
             self.cohere_client = None
             print("Warning: COHERE_API_KEY not set. Reranking will be skipped.")
+
+    def _hybrid_retrieve(self, query: str, vector_retriever, bm25_retriever) -> List[NodeWithScore]:
+        """
+        Perform weighted hybrid retrieval combining vector and BM25 search
+
+        Args:
+            query: The user's query
+            vector_retriever: Vector-based retriever
+            bm25_retriever: BM25-based retriever
+
+        Returns:
+            Combined and reranked list of nodes with weighted scores
+        """
+        # Retrieve from both retrievers
+        vector_nodes = vector_retriever.retrieve(query)
+        bm25_nodes = bm25_retriever.retrieve(query)
+
+        # Create a dictionary to store combined scores
+        node_scores = {}
+
+        # Add vector scores with weight
+        for node in vector_nodes:
+            node_id = node.node.node_id
+            node_scores[node_id] = {
+                'node': node.node,
+                'score': node.score * config.VECTOR_WEIGHT
+            }
+
+        # Add BM25 scores with weight
+        for node in bm25_nodes:
+            node_id = node.node.node_id
+            if node_id in node_scores:
+                # Combine scores if node exists in both
+                node_scores[node_id]['score'] += node.score * config.BM25_WEIGHT
+            else:
+                # Add new node from BM25
+                node_scores[node_id] = {
+                    'node': node.node,
+                    'score': node.score * config.BM25_WEIGHT
+                }
+
+        # Convert back to NodeWithScore and sort by combined score
+        combined_nodes = [
+            NodeWithScore(node=data['node'], score=data['score'])
+            for data in node_scores.values()
+        ]
+        combined_nodes.sort(key=lambda x: x.score, reverse=True)
+
+        # Return top-k nodes
+        return combined_nodes[:config.TOP_K_RETRIEVAL]
 
     def _rerank_nodes(self, query: str, nodes: list) -> list:
         """
@@ -129,14 +197,21 @@ class RAGEngine:
         Returns:
             Generated answer from the LLM
         """
-        # Create retriever with hybrid search
-        retriever = VectorIndexRetriever(
+        # Create vector retriever
+        vector_retriever = VectorIndexRetriever(
             index=self.index,
             similarity_top_k=config.TOP_K_RETRIEVAL
         )
 
-        # Retrieve nodes
-        retrieved_nodes = retriever.retrieve(question)
+        # Create BM25 retriever using all nodes
+        bm25_retriever = BM25Retriever.from_defaults(
+            nodes=self.all_nodes,
+            similarity_top_k=config.TOP_K_RETRIEVAL
+        )
+
+        # Perform weighted hybrid retrieval (0.7 vector, 0.3 BM25)
+        retrieved_nodes = self._hybrid_retrieve(question, vector_retriever, bm25_retriever)
+        print(f"Retrieved {len(retrieved_nodes)} nodes (hybrid: {config.VECTOR_WEIGHT} vector + {config.BM25_WEIGHT} BM25).")
 
         # Rerank nodes
         if self.cohere_client:
@@ -145,17 +220,10 @@ class RAGEngine:
             # If no reranker, use top-k from retrieval
             reranked_nodes = retrieved_nodes[:config.TOP_K_RERANK]
 
-        # Create query engine with reranked nodes
-        query_engine = RetrieverQueryEngine.from_args(
-            retriever=retriever,
-            llm=self.llm,
-            node_postprocessors=[
-                SimilarityPostprocessor(similarity_cutoff=0.5)
-            ]
-        )
+        print(f"Using {len(reranked_nodes)} reranked nodes for generation.")
 
-        # Build custom prompt
-        system_prompt = """You are an intelligent tutor for high school History, Geography, and Civics.
+        # Build custom prompt template
+        qa_prompt_str = """You are an intelligent tutor for high school History, Geography, and Civics.
 Your role is to help students understand concepts from their textbooks.
 
 Guidelines:
@@ -166,10 +234,25 @@ Guidelines:
 5. Keep answers concise but comprehensive
 6. Cite specific concepts from the textbook when relevant
 
-Answer the student's question based on the provided context."""
+Context information is below:
+---------------------
+{context_str}
+---------------------
 
-        # Generate response
-        response = query_engine.query(question)
+Given the context information above, answer the following question:
+Question: {query_str}
+Answer:"""
+
+        qa_prompt_template = PromptTemplate(qa_prompt_str)
+
+        # Create response synthesizer with custom prompt
+        response_synthesizer = get_response_synthesizer(
+            llm=self.llm,
+            text_qa_template=qa_prompt_template
+        )
+
+        # Generate response using reranked nodes
+        response = response_synthesizer.synthesize(question, nodes=reranked_nodes)
         answer = str(response)
 
         # Log the query
@@ -192,7 +275,7 @@ def test_engine():
     engine = RAGEngine()
 
     print("\nTesting with sample query...")
-    test_query = "What is democracy?"
+    test_query = " 公民身分如何演變?"
     response = engine.query(test_query)
 
     print(f"\nQuery: {test_query}")

@@ -28,5 +28,8 @@ CHUNK_OVERLAP = 50
 TOP_K_RETRIEVAL = 10
 TOP_K_RERANK = 3
 
+VECTOR_WEIGHT = 0.7
+BM25_WEIGHT = 0.3
+
 # Embedding Model
 EMBEDDING_MODEL = "text-embedding-3-small"
