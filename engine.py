@@ -186,7 +186,7 @@ class RAGEngine:
 
         return reranked_nodes
 
-    def query(self, question: str, session_id: str = None) -> str:
+    def query(self, question: str, session_id: str = None) -> dict:
         """
         Process a student query through the RAG pipeline
 
@@ -195,7 +195,9 @@ class RAGEngine:
             session_id: Optional session identifier
 
         Returns:
-            Generated answer from the LLM
+            Dictionary containing:
+                - answer: Generated answer from the LLM
+                - sources: List of source references used
         """
         # Create vector retriever
         vector_retriever = VectorIndexRetriever(
@@ -255,6 +257,19 @@ Answer:"""
         response = response_synthesizer.synthesize(question, nodes=reranked_nodes)
         answer = str(response)
 
+        # Extract source references from reranked nodes
+        sources = []
+        for i, node in enumerate(reranked_nodes, 1):
+            metadata = node.node.metadata
+            source_info = {
+                "index": i,
+                "subject": metadata.get("subject", "Unknown"),
+                "level": metadata.get("level", "Unknown"),
+                "filename": metadata.get("filename", "Unknown"),
+                "text_preview": node.node.get_content()[:200] + "..." if len(node.node.get_content()) > 200 else node.node.get_content()
+            }
+            sources.append(source_info)
+
         # Log the query
         self.query_logger.log_query(
             question=question,
@@ -262,7 +277,10 @@ Answer:"""
             response_length=len(answer)
         )
 
-        return answer
+        return {
+            "answer": answer,
+            "sources": sources
+        }
 
     def get_query_statistics(self):
         """Get query statistics from the logger"""
@@ -275,11 +293,15 @@ def test_engine():
     engine = RAGEngine()
 
     print("\nTesting with sample query...")
-    test_query = " 公民身分如何演變?"
-    response = engine.query(test_query)
+    test_query = "公民身分如何演變?"
+    result = engine.query(test_query)
 
     print(f"\nQuery: {test_query}")
-    print(f"Response: {response}")
+    print(f"\nAnswer: {result['answer']}")
+    print(f"\nSources ({len(result['sources'])} references):")
+    for source in result['sources']:
+        print(f"\n[{source['index']}] {source['subject']} - {source['level']} ({source['filename']})")
+        print(f"Preview: {source['text_preview'][:100]}...")
 
     print("\nQuery statistics:")
     stats = engine.get_query_statistics()

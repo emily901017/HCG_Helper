@@ -52,6 +52,15 @@ def chat_query():
     Response:
     {
         "answer": str,
+        "sources": [
+            {
+                "index": int,
+                "subject": str,
+                "level": str,
+                "filename": str,
+                "text_preview": str
+            }
+        ],
         "session_id": str
     }
     """
@@ -67,13 +76,14 @@ def chat_query():
         if rag_engine is None:
             return jsonify({"error": "RAG engine not initialized. Please check backend logs."}), 503
 
-        # Generate answer
+        # Generate answer with sources
         print(f"Processing query: {question}")
-        answer = rag_engine.query(question=question, session_id=session_id)
-        print(f"Answer generated successfully")
+        result = rag_engine.query(question=question, session_id=session_id)
+        print(f"Answer generated successfully with {len(result['sources'])} sources")
 
         return jsonify({
-            "answer": answer,
+            "answer": result['answer'],
+            "sources": result['sources'],
             "session_id": session_id
         }), 200
 
