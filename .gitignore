@@ -2,6 +2,10 @@
 .env
 frontend/.env
 
+.safetensors
+.pt
+.ckpt
+
 # Python
 __pycache__/
 *.py[cod]

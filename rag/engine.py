@@ -428,7 +428,7 @@ class RAGEngine:
                 "subject": metadata.get("subject", "Unknown"),
                 "level": metadata.get("level", "Unknown"),
                 "filename": metadata.get("filename", "Unknown"),
-                "text_preview": node.node.get_content()[:200] + "..." if len(node.node.get_content()) > 200 else node.node.get_content()
+                "text_preview": node.node.get_content()
             }
             sources.append(source_info)
 

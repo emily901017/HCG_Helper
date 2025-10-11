@@ -242,6 +242,98 @@ The original Streamlit application is still available in `app.py` if you need to
 streamlit run app.py
 ```
 
+## Evaluation System
+
+The project includes a comprehensive RAG evaluation system located in the `eval/` directory to assess and improve the quality of the AI tutor's responses.
+
+### Evaluation Pipeline
+
+The evaluation system consists of three main components:
+
+1. **Document Chunking** (`chunker.py`) - Splits textbook content into manageable chunks
+2. **Q&A Generation** (`qa_generator.py`) - Uses GPT-4o to generate question-answer pairs from chunks
+3. **RAG Evaluation** (`evaluator.py`) - Evaluates the RAG pipeline's performance using multiple metrics
+
+### Evaluation Metrics
+
+The system evaluates answers using three binary metrics:
+
+- **Faithfulness**: Does the answer only contain information from the retrieved context?
+- **Relevance**: Does the answer address the question?
+- **Correctness**: Does the answer accurately match the ground truth?
+
+Each metric returns `true` or `false`, and aggregate metrics show the percentage of passing samples.
+
+### Evaluation Dataset
+
+The evaluation dataset (`eval_dataset.json`) contains:
+- **258 samples** across 6 textbook files (Civic L1/L2, Geography L1/L2, History L1/L2)
+- Each sample includes:
+  - Question (student-like queries)
+  - Ground truth answer (extracted from textbook)
+  - Ground truth context (source chunk)
+  - Source file and chunk ID metadata
+
+### Running Evaluations
+
+#### Generate Evaluation Dataset
+
+```bash
+# Generate Q&A pairs from textbook data
+python eval/run_evaluation.py generate --data-dir ./data --output eval_data/eval_dataset.json --qa-pairs 1
+```
+
+Parameters:
+- `--data-dir`: Directory containing textbook files (.txt)
+- `--output`: Output path for evaluation dataset
+- `--chunk-size`: Chunk size in characters (default: 2048)
+- `--qa-pairs`: Number of Q&A pairs per chunk (default: 1)
+
+#### Run Full Evaluation
+
+```bash
+# Evaluate RAG pipeline on the dataset
+python eval/run_evaluation.py evaluate --dataset eval_data/eval_dataset.json --output eval_data/evaluation_result.json
+```
+
+**Note**: Full evaluation with 258 samples takes ~28 minutes due to API rate limits (6.5s delay between samples for Cohere reranking).
+
+#### Quick Testing (10 Samples)
+
+```bash
+# Test with a subset for quick validation
+python eval/test_evaluator.py
+```
+
+This evaluates 10 samples without retrieval evaluation, completing in ~1 minute.
+
+
+### Evaluation Files Structure
+
+```
+eval/
+├── chunker.py                  # Document chunking
+├── qa_generator.py             # Q&A pair generation
+├── evaluator.py                # RAG evaluation metrics
+├── run_evaluation.py           # Main evaluation pipeline
+├── test_evaluator.py           # Quick testing (10 samples)
+```
+
+### Configuration
+
+Evaluation uses the same configuration from `config.py`:
+- `LLM_MODEL`: Model for Q&A generation and evaluation (default: gpt-4o)
+- `RERANKER_TYPE`: Reranker for RAG pipeline (cohere or qwen)
+- API keys from `.env` file
+
+### Best Practices
+
+1. **Start with small datasets** - Use `--qa-pairs 1` to generate one question per chunk
+2. **Test before full evaluation** - Run `test_evaluator.py` to verify setup
+3. **Monitor API costs** - 258 samples = ~516 API calls (2 per sample: RAG + evaluation)
+4. **Use filtering strategically** - Remove clear failures to focus on edge cases
+5. **Cross-validate critical failures** - Use Gemini double-check for disputed samples
+
 ## Next Steps
 
 1. Add authentication for the teacher dashboard
