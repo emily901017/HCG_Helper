@@ -17,7 +17,7 @@ from llama_index.core.schema import NodeWithScore
 import config
 from database import QueryLogger
 from typing import List
-from .qwen_reranker import QwenReranker
+
 import cohere
 
 
@@ -125,24 +125,8 @@ class RAGEngine:
                 self.reranker = None
                 self.reranker_type = None
                 print("Warning: COHERE_API_KEY not set. Reranking will be skipped.")
-
-        elif reranker_type == 'qwen':
-            # Use Qwen local reranker
-            try:
-                use_flash_attention = getattr(config, 'USE_FLASH_ATTENTION', False)
-                self.reranker = QwenReranker(use_flash_attention=use_flash_attention)
-                self.reranker_type = 'qwen'
-                self.cohere_client = None
-                print("✓ Qwen3 Reranker initialized successfully")
-            except Exception as e:
-                self.reranker = None
-                self.cohere_client = None
-                self.reranker_type = None
-                print(f"Warning: Could not initialize Qwen reranker: {e}")
-                print("Reranking will be skipped.")
-
         else:
-            print(f"Warning: Unknown reranker type '{reranker_type}'. Valid options: 'cohere', 'qwen'")
+            print(f"Warning: Unknown reranker type '{reranker_type}'. Valid options: 'cohere'")
             self.reranker = None
             self.cohere_client = None
             self.reranker_type = None

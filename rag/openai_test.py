@@ -11,7 +11,7 @@ response = client.chat.completions.create(
     model="gpt-4o",
     messages=[
         {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": "你知道匆匆忙忙游刃有餘是誰講的嗎"}
+        {"role": "user", "content": "日治時期臺灣人主要哪兩個國家求學？"}
     ]
 )
 
