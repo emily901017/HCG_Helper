@@ -1,173 +1,412 @@
-好的，這是一個根據您的專題研究成果，轉換成給 Coding Agent 的規格文件 (Spec)。
+# Project Specification: HGC Helper - Educational Insights Platform
+
+## 1. Project Overview
+
+**HGC Helper** is an intelligent tutoring system for high school History, Geography, and Civics education. It leverages Retrieval-Augmented Generation (RAG) to provide accurate, context-aware answers to student questions while collecting learning analytics for teachers.
+
+### Key Features
+- AI-powered question answering with source citations
+- Teacher dashboard with query analytics and insights
+- Hybrid retrieval system (vector + keyword search)
+- Multi-model LLM support (OpenAI, Gemini)
+- Comprehensive evaluation framework
 
 ---
 
-### **Project Specification: HGC Helper - Educational Insights Platform**
+## 2. User Personas
 
-#### **1. Project Objective**
+### 2.1. Student
+- **Primary Goal**: Get accurate answers to social studies questions
+- **Needs**:
+  - Simple, intuitive chat interface
+  - Clear, well-sourced answers
+  - Context from textbooks with citations
+  - Session-based conversation tracking
 
-To build a full-stack web application, "HGC Helper," that functions as an intelligent tutor for high school History, Geography, and Civics. The system will use a Retrieval-Augmented Generation (RAG) pipeline to answer student questions based on a textbook knowledge base. Critically, it will also log all student queries to create a "learning difficulty database," providing teachers with actionable insights for lesson planning.
+### 2.2. Teacher
+- **Primary Goal**: Understand student learning difficulties and common misconceptions
+- **Needs**:
+  - Overview of student questions and patterns
+  - Analytics on query frequency and topics
+  - Search and filter capabilities
+  - Export functionality for further analysis
+  - Visualization of trends over time
 
-#### **2. User Personas**
+---
 
-1.  **Student:** Asks academic questions related to social studies subjects and receives credible, context-aware answers.
-2.  **Teacher:** Accesses a dashboard to analyze the questions students are asking, in order to identify common areas of confusion or curiosity.
+## 3. System Architecture
 
-#### **3. Core Functional Requirements**
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     React Frontend                           │
+│  ┌──────────────────┐      ┌──────────────────┐            │
+│  │  Student Chat    │      │ Teacher Dashboard │            │
+│  │  - Q&A Interface │      │ - Analytics       │            │
+│  │  - Source Display│      │ - Query Search    │            │
+│  └──────────────────┘      └──────────────────┘            │
+└─────────────────┬───────────────────┬───────────────────────┘
+                  │                   │
+            REST API (CORS enabled)   │
+                  │                   │
+┌─────────────────▼───────────────────▼───────────────────────┐
+│                    Flask Backend API                         │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
+│  │ /api/chat/*  │  │/api/teacher/*│  │ Query Logger │     │
+│  └──────────────┘  └──────────────┘  └──────────────┘     │
+└─────────────────┬───────────────────────────────────────────┘
+                  │
+       ┌──────────▼──────────┐
+       │    RAG Engine       │
+       │  ┌───────────────┐  │
+       │  │ Hybrid Search │  │
+       │  │ Vector + BM25 │  │
+       │  └───────┬───────┘  │
+       │          │           │
+       │  ┌───────▼───────┐  │
+       │  │   Reranking   │  │
+       │  │ (Cohere/Qwen) │  │
+       │  └───────┬───────┘  │
+       │          │           │
+       │  ┌───────▼───────┐  │
+       │  │ LLM Synthesis │  │
+       │  │ (GPT-4/Gemini)│  │
+       │  └───────────────┘  │
+       └─────────────────────┘
+                  │
+       ┌──────────▼──────────┐
+       │     ChromaDB        │
+       │  Vector Database    │
+       └─────────────────────┘
+```
 
-**3.1. Student-Facing Interface**
-* **[UI]** A clean, simple chat interface.
-* **[Backend]** User can input a question in a text box.
-* **[Backend]** The submitted question triggers the RAG pipeline.
-* **[Backend]** The system must log the user's raw question, a timestamp, and potentially a session ID to a persistent database (for the teacher dashboard).
-* **[UI]** The generated answer from the LLM is displayed to the student in the chat interface.
-* **[NEW FEATURE]** Source references are displayed below each answer, showing:
-  * Subject and level (e.g., History - L1, Geography - L2)
-  * Filename of the source textbook
-  * Preview of the relevant text excerpt (first 200 characters)
-  * Each source is numbered for easy reference
+---
 
-**3.2. Teacher-Facing Dashboard**
-* **[UI]** A separate, protected page or view for teachers.
-* **[Backend]** Fetches all logged student questions from the database.
-* **[UI]** Displays the questions in a searchable, filterable, and sortable table or list.
-    * Columns should include: `Question`, `Timestamp`, `Frequency (if aggregated)`.
-* **[UI Feature - Optional but Recommended]** Basic data visualization, such as a word cloud of common keywords in questions or a bar chart showing question frequency over time.
+## 4. Core Functional Requirements
 
-**3.3. Data Ingestion & Processing (Offline Pipeline)**
-* **[Task]** A script or module to process raw text files from high school social studies textbooks.
-* **[Processing Steps]**
-    1.  **Load:** Read text from data folder which contains civic, geo, history data in txt format.
-    2.  **Clean:** Remove irrelevant artifacts, headers, footers, etc.
-    3.  **Chunk:** Split the cleaned text into semantically meaningful chunks of a specified size.
-    4.  **Embed:** Convert each text chunk into a vector embedding.
-    5.  **Store:** Ingest the text chunks and their corresponding embeddings into a ChromaDB vector store.
+### 4.1. Student Interface
 
-#### **4. Technical Stack**
+#### Chat Interface
+- **Input**: Text box for question submission
+- **Output**:
+  - AI-generated answer
+  - Source references with:
+    - Subject and level (e.g., "History - L1")
+    - Source filename
+    - Text preview (first 200 characters)
+    - Numbered citations
+- **Features**:
+  - Session-based conversation memory (configurable rounds)
+  - Clear chat history option
+  - Loading indicators
+  - Responsive design
 
-* **Programming Language:** `Python`
-* **Core Framework:** `LlamaIndex` (for orchestrating the RAG pipeline)
-* **Backend API:** `Flask` with Flask-CORS for REST API endpoints
-* **Frontend Interface:** `React.js` with React Router for navigation
-* **Vector Database:** `ChromaDB`
-* **LLM API:** The system must be able to integrate with and switch between:
-    * `Google Gemini`
-    * `OpenAI GPT-4`
-    * (Implement using API keys stored in environment variables)
-* **Reranking:** `Cohere Rerank API` for improving retrieval quality
+#### Conversation Memory
+- Maintains last N conversation rounds per session
+- Each round = 1 user message + 1 assistant message
+- Configurable via `MAX_MEMORY_ROUNDS` in config
+- Automatic cleanup of oldest messages
 
-#### **5. RAG Pipeline Architecture (Backend Logic)**
+### 4.2. Teacher Dashboard
 
-This is the core logic triggered by a student's query. It must be implemented using LlamaIndex.
+#### Query Analytics
+- **All Queries View**: Searchable, filterable table of student questions
+- **Statistics Overview**:
+  - Total queries
+  - Recent queries (last 7 days)
+  - Queries by subject
+  - Unique sessions
+- **Visualizations**:
+  - Timeline of query frequency
+  - Subject distribution charts
+  - Common keywords word cloud
+- **Search & Filter**:
+  - Keyword search
+  - Date range filtering
+  - Subject filtering
+- **Export**: CSV export functionality
 
-1.  **Query Input:** Receive the student's question string from the React frontend.
+### 4.3. Data Ingestion Pipeline
 
-2.  **Hybrid Retrieval:**
-    * Configure a retriever in LlamaIndex that combines both dense (vector/semantic) search and sparse (keyword/BM25) search with configurable weights (default: 0.7 vector + 0.3 BM25).
-    * The retriever should query the ChromaDB knowledge base and return a list of potentially relevant text nodes (documents).
+**Offline process** for textbook content preparation:
 
-3.  **Reranking:**
-    * Integrate a `Reranker` model (e.g., Cohere Rerank, or a sentence-transformer based cross-encoder).
-    * Pass the retrieved nodes from the retrieval step to the reranker.
-    * The reranker will re-order the nodes based on their relevance to the original query, outputting the top-k most relevant nodes.
+1. **Load**: Read `.txt` files from `data/` directory
+   - Civic L1/L2
+   - Geography L1/L2
+   - History L1/L2
 
-4.  **Contextual Generation:**
-    * Construct a prompt for the LLM. This prompt must include:
-        * The refined, high-relevance context from the reranking step.
-        * The original student question.
-    * Send this combined prompt to the selected LLM API (Gemini or GPT-4).
-    * **Extract source references** from the reranked nodes, including metadata (subject, level, filename) and text previews.
-    * Return both the LLM's generated response and the source references to the frontend.
+2. **Clean**: Remove artifacts, headers, footers
 
-#### **6. Implementation Plan & Task Breakdown**
+3. **Chunk**: Split into semantic chunks
+   - Default size: 512 characters
+   - Overlap: 50 characters
 
-1.  **Environment Setup:**
-    * Initialize a Python project with `pip` or `conda`.
-    * Install all required libraries: `llama-index`, `streamlit`, `chromadb`, `google-generativeai`, `openai`, etc.
-    * Set up `.env` file for API keys.
+4. **Embed**: Generate vector embeddings
+   - Model: `text-embedding-3-small`
 
-2.  **Module 1: Data Ingestion**
-    * Write `ingest.py`.
-    * Implement functions for loading, cleaning, chunking, and embedding textbook data.
-    * Ensure data is successfully stored in a local ChromaDB instance.
+5. **Store**: Ingest into ChromaDB
+   - Collection: "textbook_knowledge"
+   - Metadata: subject, level, filename
 
-3.  **Module 2: RAG Backend**
-    * Create `engine.py` implementing the RAG pipeline.
-    * Use LlamaIndex to build the query engine encompassing the Hybrid Retriever (0.7 vector + 0.3 BM25), Reranker, and LLM Synthesizer.
-    * Implement the logging mechanism for student questions.
-    * Return both answers and source references from queries.
+---
 
-4.  **Module 3: Backend API**
-    * Create `api.py` using Flask.
-    * Implement REST API endpoints:
-        * `/api/chat/query` - Process student questions and return answers with sources
-        * `/api/teacher/queries` - Get all logged questions
-        * `/api/teacher/statistics` - Get query statistics
-        * `/api/teacher/search` - Search questions by keyword
-        * `/api/teacher/keywords` - Get common keywords
-    * Enable CORS for React frontend communication.
+## 5. RAG Pipeline Specification
 
-5.  **Module 4: Frontend UI**
-    * Create React application with components:
-        * `StudentChat.js` - Interactive chat interface with source display
-        * `TeacherDashboard.js` - Analytics dashboard with charts and search
-        * `App.js` - Main router and navigation
-    * Use React Router for navigation between student and teacher views.
-    * Use Recharts for data visualization.
-    * Implement beautiful UI for displaying source references below answers.
+### 5.1. Hybrid Retrieval
 
-6.  **Integration & Testing:**
-    * Connect the React frontend to the Flask backend API.
-    * Thoroughly test the end-to-end flow: from asking a question to seeing the answer with sources.
-    * Verify the question is logged and appears in the teacher dashboard.
-    * Test the teacher dashboard's charts, search, and analytics features.
+**Vector Search (0.7 weight)**:
+- Uses semantic similarity
+- Model: OpenAI text-embedding-3-small
+- Top-K: 10 documents
 
+**BM25 Search (0.3 weight)**:
+- Keyword-based sparse retrieval
+- Top-K: 10 documents
 
-7.1. Objective
-To establish a systematic framework for evaluating the RAG pipeline's performance. The evaluation will focus on the accuracy of information retrieval and the quality of the generated answers, ensuring they are relevant, faithful to the source, and free of hallucinations.
+**Combination**:
+- Weighted scoring of both retrievers
+- Deduplication of overlapping results
+- Final top-K: 10 combined results
 
-7.2. Evaluation Dataset Generation (Chunk-based Method)
-A high-quality Question & Answer dataset will be automatically generated for evaluation, overcoming the challenges of content-drift and hallucination common in large-scale generation.
+### 5.2. Reranking
 
-Step 1: Document Chunking:
+**Supported Rerankers**:
+- **Cohere** (API-based):
+  - Model: rerank-v3.5
+  - Fast, cloud-based
+  - Requires API key
+  - Rate limit: 10 calls/minute (free tier)
 
-The original textbook documents will be chunked by size 512. Each chunk will serve as a ground-truth context.
+- **Qwen** (Local):
+  - Model: Qwen/Qwen2.5-7B-Instruct
+  - No API limits
+  - Requires local model download
+  - Optional flash attention support
 
-Step 2: Iterative Q&A Generation:
+**Configuration**:
+- Top-K after reranking: 5 documents
+- Configurable via `RERANKER_TYPE` in config
 
-Each chunk will be independently fed to an LLM.
+### 5.3. LLM Generation
 
-A precise prompt will instruct the LLM to generate a small number (e.g., 2  Q&A pairs based solely on the provided chunk.
+**Supported Models**:
+- **OpenAI GPT-4o** (default)
+- **Google Gemini** (alternative)
 
-Example Prompt: "Please act as a high school student. Based ONLY on the text provided below, generate 3-5 questions a student might ask, along with answers derived directly from the text. The answer must not contain any information outside of this text."
+**Prompt Engineering**:
+```
+你是一位聰明的高中歷史、地理、公民科家教。
+你的角色是幫助學生理解他們課本中的概念。
 
-Step 3: Verification and Refinement:
+[Conversation history if available]
 
-Since each Q&A pair is tied to a specific source chunk, manual or semi-automated verification becomes highly efficient.
+上下文資訊如下：
+[Retrieved and reranked context]
 
-Checks:
+根據上述的上下文資訊和對話歷史，請回答下列問題：
+問題：[User question]
+答案：
+```
 
-Is the question relevant to the chunk?
+**Output**:
+- Natural language answer
+- Source metadata for citations
 
-Is the answer factually correct according to the chunk?
+---
 
-Does the answer avoid introducing external information (no hallucination)?
+## 6. Evaluation Framework
 
-Invalid or low-quality pairs will be discarded to ensure the final evaluation dataset is reliable.
+### 6.1. Dataset Generation
 
-7.3. Key Evaluation Metrics
-The generated dataset will be used to run batch tests and measure the following:
+**Automatic Generation Pipeline**:
+1. Chunk textbooks (size: 2048 characters, overlap: 128)
+2. Use GPT-4o to generate Q&A pairs per chunk
+3. Ensure answers are faithful to source chunks
+4. Store with metadata (chunk_id, source_file, ground_truth)
 
-Retrieval Evaluation:
+**Dataset Statistics**:
+- Total samples: 258
+- Distribution: 6 textbook files
+- Format: JSON with question, answer, context, metadata
 
-Hit Rate: For a given question, did the retrieval step (Hybrid Retrieval + Reranker) successfully fetch the ground-truth chunk from which the question was generated?
+### 6.2. Evaluation Metrics
 
-Mean Reciprocal Rank (MRR): Measures the average rank of the correct ground-truth chunk in the list of retrieved documents. A higher MRR indicates the retriever is more effective at prioritizing the correct context.
+**Binary Metrics** (true/false):
+- **Faithfulness**: Answer contains only information from context
+- **Relevance**: Answer addresses the question
+- **Correctness**: Answer matches ground truth meaning
 
-Generation Evaluation (End-to-End):
+**Aggregate Metrics**:
+- Faithfulness Rate: % of faithful answers
+- Relevance Rate: % of relevant answers
+- Correctness Rate: % of correct answers
 
-Faithfulness: How factually accurate is the generated answer compared to the retrieved context? This metric penalizes hallucinations.
+### 6.3. Evaluation Pipeline
 
-Answer Relevance: How well does the generated answer address the user's question? The answer could be faithful but irrelevant if it fails to grasp the user's intent.
+```bash
+# Generate dataset
+python eval/run_evaluation.py generate --data-dir ./data --output eval_dataset.json
 
-(Evaluation Method: These metrics can be assessed using an LLM-as-a-judge approach or manual human scoring.)
+# Run evaluation
+python eval/run_evaluation.py evaluate --dataset eval_dataset.json --output results.json
+
+# Analyze results
+python analyze_now.py
+
+# Cross-validate with Gemini
+python eval/double_check_with_gemini.py
+```
+
+**Tools Available**:
+- `chunker.py` - Document chunking
+- `qa_generator.py` - Q&A pair generation
+- `evaluator.py` - Metric calculation
+- `run_evaluation.py` - Full pipeline
+- `test_evaluator.py` - Quick testing (10 samples)
+- `analyze_results.py` - Error analysis
+- `double_check_with_gemini.py` - Cross-validation
+- `filter_false_samples.py` - Dataset filtering
+- `clean_retrieval_metrics.py` - JSON cleanup
+
+---
+
+## 7. Technical Stack
+
+### 7.1. Backend
+- **Language**: Python 3.8+
+- **Web Framework**: Flask + Flask-CORS
+- **RAG Orchestration**: LlamaIndex
+- **Vector Database**: ChromaDB (persistent)
+- **Query Logging**: SQLite
+
+### 7.2. Frontend
+- **Framework**: React.js
+- **Routing**: React Router
+- **HTTP Client**: Axios
+- **Visualization**: Recharts
+- **Styling**: CSS3
+
+### 7.3. AI/ML Services
+- **LLM Providers**:
+  - OpenAI (GPT-4o, text-embedding-3-small)
+  - Google Gemini (optional)
+- **Reranking**:
+  - Cohere Rerank API
+  - Qwen (local alternative)
+
+### 7.4. Development Tools
+- **Package Manager**: pip (migrate to uv planned)
+- **Environment**: .env file for configuration
+- **Version Control**: Git
+
+---
+
+## 8. API Specification
+
+### 8.1. Student Endpoints
+
+#### POST `/api/chat/query`
+Submit a question and get an answer with sources.
+
+**Request**:
+```json
+{
+  "question": "公民身分如何演變?",
+  "session_id": "optional-session-id"
+}
+```
+
+**Response**:
+```json
+{
+  "answer": "公民身分的演變...",
+  "session_id": "generated-or-provided-session-id",
+  "sources": [
+    {
+      "index": 1,
+      "subject": "Civic",
+      "level": "L1",
+      "filename": "Civic_L1.txt",
+      "text_preview": "公民身分的概念起源於..."
+    }
+  ]
+}
+```
+
+#### GET `/api/chat/health`
+Health check endpoint.
+
+**Response**:
+```json
+{
+  "status": "healthy",
+  "timestamp": "2025-01-10T10:30:00Z"
+}
+```
+
+### 8.2. Teacher Endpoints
+
+#### GET `/api/teacher/queries`
+Get all logged student queries.
+
+**Response**:
+```json
+{
+  "queries": [
+    {
+      "id": 1,
+      "question": "公民身分如何演變?",
+      "timestamp": "2025-01-10T10:30:00",
+      "session_id": "session-123",
+      "response_length": 250
+    }
+  ]
+}
+```
+
+#### GET `/api/teacher/statistics`
+Get query statistics.
+
+**Response**:
+```json
+{
+  "total_queries": 150,
+  "recent_queries_7days": 45,
+  "by_subject": {
+    "History": 60,
+    "Geography": 50,
+    "Civic": 40
+  }
+}
+```
+
+#### POST `/api/teacher/search`
+Search queries by keyword.
+
+**Request**:
+```json
+{
+  "keyword": "公民"
+}
+```
+
+**Response**:
+```json
+{
+  "queries": [/* matching queries */]
+}
+```
+
+#### GET `/api/teacher/keywords?limit=50`
+Get common keywords from queries.
+
+**Response**:
+```json
+{
+  "keywords": [
+    ["公民", 45],
+    ["演變", 32],
+    ["權力", 28]
+  ]
+}
+```
+

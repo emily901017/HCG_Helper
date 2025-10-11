@@ -234,14 +234,6 @@ Make sure Flask-CORS is installed and enabled in `backend/api.py`
 - Check that ChromaDB directory exists and is accessible
 - Verify API keys are set in `.env`
 
-## Original Streamlit App
-
-The original Streamlit application is still available in `app.py` if you need to reference it or run it:
-
-```bash
-streamlit run app.py
-```
-
 ## Evaluation System
 
 The project includes a comprehensive RAG evaluation system located in the `eval/` directory to assess and improve the quality of the AI tutor's responses.
@@ -336,9 +328,44 @@ Evaluation uses the same configuration from `config.py`:
 
 ## Next Steps
 
+### Immediate Improvements
 1. Add authentication for the teacher dashboard
 2. Implement rate limiting
 3. Add more advanced analytics
 4. Deploy to production (e.g., Heroku, AWS, DigitalOcean)
 5. Add user accounts and profiles
 6. Implement real-time updates with WebSockets
+7. Migrate to UV for faster dependency management and environment setup
+
+### Future Research Features
+
+This project will be enhanced through three progressive research stages:
+
+#### Stage 1: Learning Diagnosis Module (學習診斷模組)
+- **Data Accumulation & Preprocessing**: Continuously collect and anonymize student query data through HGC Helper
+- **Semantic Topic Discovery**: Apply clustering algorithms (DBSCAN) to group semantically similar questions regardless of wording variations
+- **Misconception Labeling**: Use LLM to analyze question clusters and generate interpretable "core misconception" labels for teachers (e.g., "Confusing 'Separation of Powers' with 'Government System'")
+
+#### Stage 2: Personalized Content Generation Module (個人化內容生成模組)
+- **Trigger Mechanism**: Automatically detect when a student's new question maps to a known misconception pattern
+- **Dynamic Prompting**: Design prompt templates that combine the student's original question with identified misconceptions to guide targeted LLM responses
+- **Scaffolded Content Generation**: Generate multi-level support materials including:
+  - Targeted concept clarification
+  - Relevant case studies and examples
+  - 1-2 practice questions to reinforce understanding
+
+#### Stage 3: Cross-Disciplinary Knowledge Graph Enhanced Retrieval (跨學科知識圖譜增強檢索)
+- **Knowledge Graph Construction**: Use LLM to analyze the history, geography, and civics knowledge base to automatically extract:
+  - Key entities (e.g., Zheng Chenggong, Age of Exploration, International Law)
+  - Inter-entity relationships (e.g., "occurred during", "influenced", "geographic context")
+  - Cross-disciplinary connections spanning all three subjects
+- **Graph RAG Implementation**: Enhance retrieval by:
+  - Performing traditional vector search
+  - Simultaneously locating relevant entities in the knowledge graph
+  - Expanding search to connected nodes across different subjects
+- **Multi-Dimensional Answer Synthesis**: Combine:
+  - Traditional text chunk retrieval
+  - Cross-disciplinary information traversed from the knowledge graph
+  - Provide integrated context to LLM for generating answers with historical depth, geographic breadth, and civic perspectives
+
+These enhancements will transform HGC Helper from a question-answering system into an intelligent tutoring system capable of diagnosing learning gaps, personalizing content, and facilitating cross-disciplinary understanding.
