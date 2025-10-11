@@ -95,17 +95,9 @@ def create_vector_store(documents: List[Document], persist_dir: str = config.CHR
         documents: List of documents to process
         persist_dir: Directory to persist ChromaDB
     """
-    # Clean document texts - create new Document objects since text is immutable
-    cleaned_documents = []
+    # Clean document texts
     for doc in documents:
-        cleaned_doc = Document(
-            text=clean_text(doc.text),
-            metadata=doc.metadata
-        )
-        cleaned_documents.append(cleaned_doc)
-
-    # Use cleaned documents for the rest of the process
-    documents = cleaned_documents
+        doc.text = clean_text(doc.text)
 
     # Set up embedding model
     embed_model = OpenAIEmbedding(
@@ -169,6 +161,7 @@ def main():
     print("\n" + "=" * 50)
     print("Data ingestion completed successfully!")
     print("=" * 50)
+    
 
 
 if __name__ == "__main__":

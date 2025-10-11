@@ -2,13 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import './StudentChat.css';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:6000';
 
 function StudentChat() {
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');
   const [loading, setLoading] = useState(false);
   const [sessionId, setSessionId] = useState('');
+  const [expandedSources, setExpandedSources] = useState({});
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -51,17 +52,19 @@ function StudentChat() {
         session_id: sessionId
       });
 
-      // Add assistant response to chat
+      // Add assistant response with sources to chat
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: response.data.answer
+        content: response.data.answer,
+        sources: response.data.sources || []
       }]);
 
     } catch (error) {
       console.error('Error fetching response:', error);
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: 'Sorry, I encountered an error. Please try again.'
+        content: 'Sorry, I encountered an error. Please try again.',
+        sources: []
       }]);
     } finally {
       setLoading(false);
@@ -71,6 +74,14 @@ function StudentChat() {
   const clearChat = () => {
     setMessages([]);
     setSessionId(generateSessionId());
+    setExpandedSources({});
+  };
+
+  const toggleSources = (messageIndex) => {
+    setExpandedSources(prev => ({
+      ...prev,
+      [messageIndex]: !prev[messageIndex]
+    }));
   };
 
   return (
@@ -94,8 +105,39 @@ function StudentChat() {
               <div className="message-avatar">
                 {message.role === 'user' ? '👤' : '🤖'}
               </div>
-              <div className="message-content">
-                {message.content}
+              <div className="message-wrapper">
+                <div className="message-content">
+                  {message.content}
+                </div>
+                {message.sources && message.sources.length > 0 && (
+                  <div className="message-sources">
+                    <button
+                      className="sources-toggle"
+                      onClick={() => toggleSources(index)}
+                    >
+                      <span className="toggle-icon">
+                        {expandedSources[index] ? '▼' : '▶'}
+                      </span>
+                      📚 Sources ({message.sources.length})
+                    </button>
+                    {expandedSources[index] && (
+                      <div className="sources-list">
+                        {message.sources.map((source) => (
+                          <div key={source.index} className="source-item">
+                            <div className="source-badge">{source.index}</div>
+                            <div className="source-details">
+                              <div className="source-meta">
+                                <span className="source-subject">{source.subject}</span>
+                                <span className="source-level">{source.level}</span>
+                              </div>
+                              <div className="source-preview">{source.text_preview}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           ))}
