@@ -121,3 +121,247 @@ This is the core logic triggered by a student's query. It must be implemented us
     * Thoroughly test the end-to-end flow: from asking a question to seeing the answer with sources.
     * Verify the question is logged and appears in the teacher dashboard.
     * Test the teacher dashboard's charts, search, and analytics features.
+
+#### **7. System Architecture & Data Flow**
+
+**7.1. RAG Pipeline Architecture & Data Flow**
+
+This section provides a detailed visual representation of how data flows through the HCG Helper system, from data ingestion to query processing and response generation.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        PHASE 1: DATA INGESTION (Offline)                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+    ┌─────────────────────────────────────────────────────────────────┐
+    │  Raw Textbook Data                                              │
+    │  ├─ data/civic/*.txt    (公民課本文本)                          │
+    │  ├─ data/geo/*.txt      (地理課本文本)                          │
+    │  └─ data/history/*.txt  (歷史課本文本)                          │
+    └───────────────────┬─────────────────────────────────────────────┘
+                        │
+                        │ Load & Read Files
+                        ▼
+    ┌──────────────────────────────────────────────────────────────────┐
+    │  Text Preprocessing Pipeline (ingest.py)                         │
+    │  ├─ Clean: Remove headers, footers, artifacts                   │
+    │  ├─ Normalize: Fix encoding, spacing issues                     │
+    │  └─ Extract Metadata: Subject, level, filename                  │
+    └───────────────────┬──────────────────────────────────────────────┘
+                        │
+                        │ Cleaned Text + Metadata
+                        ▼
+    ┌──────────────────────────────────────────────────────────────────┐
+    │  Text Chunking Module                                            │
+    │  ├─ Strategy: Semantic chunking (preserve context)              │
+    │  ├─ Chunk Size: 512 tokens (configurable)                       │
+    │  └─ Overlap: 50 tokens between chunks                           │
+    └───────────────────┬──────────────────────────────────────────────┘
+                        │
+                        │ Text Chunks with Metadata
+                        ▼
+    ┌──────────────────────────────────────────────────────────────────┐
+    │  Dual Index Creation (LlamaIndex)                                │
+    │  ├─ Vector Embeddings: OpenAI text-embedding-3-large            │
+    │  └─ BM25 Index: Token-based sparse representation               │
+    └───────────────────┬──────────────────────────────────────────────┘
+                        │
+                        │ Store Indexes
+                        ▼
+    ┌──────────────────────────────────────────────────────────────────┐
+    │  ChromaDB Vector Store                                           │
+    │  ├─ Collections by subject (civic, geo, history)                │
+    │  ├─ Vector embeddings (dense)                                   │
+    │  ├─ BM25 indexes (sparse)                                       │
+    │  └─ Metadata: {subject, level, filename, chunk_id}              │
+    └──────────────────────────────────────────────────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    PHASE 2: QUERY PROCESSING (Real-time)                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+    ┌──────────────────────────────────────────────────────────────────┐
+    │  Student Question (Frontend)                                     │
+    │  "台灣的民主化過程是什麼?"                                       │
+    └───────────────────┬──────────────────────────────────────────────┘
+                        │
+                        │ POST /api/chat/query
+                        ▼
+    ┌──────────────────────────────────────────────────────────────────┐
+    │  Flask API Endpoint (api.py)                                     │
+    │  ├─ Parse request                                                │
+    │  ├─ Log query to database (timestamp, session_id)               │
+    │  └─ Forward to RAG engine                                        │
+    └───────────────────┬──────────────────────────────────────────────┘
+                        │
+                        │ Query string
+                        ▼
+    ┌──────────────────────────────────────────────────────────────────┐
+    │  Hybrid Retriever (engine.py - LlamaIndex)                       │
+    │                                                                  │
+    │  ┌─────────────────────┐    ┌──────────────────────┐            │
+    │  │ Vector Search       │    │ BM25 Search          │            │
+    │  │ (Semantic)          │    │ (Keyword)            │            │
+    │  │ - Embed query       │    │ - Tokenize query     │            │
+    │  │ - Cosine similarity │    │ - TF-IDF scoring     │            │
+    │  │ - Top 20 results    │    │ - Top 20 results     │            │
+    │  └──────────┬──────────┘    └──────────┬───────────┘            │
+    │             │                           │                        │
+    │             └───────────┬───────────────┘                        │
+    │                         │                                        │
+    │              Weighted Fusion (α=0.7, β=0.3)                     │
+    │              Score = 0.7*vector + 0.3*BM25                      │
+    │                         │                                        │
+    │                         ▼                                        │
+    │              ┌──────────────────────┐                            │
+    │              │ Top 15 Candidates    │                            │
+    │              └──────────────────────┘                            │
+    └───────────────────┬──────────────────────────────────────────────┘
+                        │
+                        │ Retrieved nodes with relevance scores
+                        ▼
+    ┌──────────────────────────────────────────────────────────────────┐
+    │  Cohere Reranker                                                 │
+    │  ├─ Input: Query + 15 candidate chunks                          │
+    │  ├─ Model: rerank-multilingual-v3.0                             │
+    │  ├─ Cross-encoder scoring (query-document pairs)                │
+    │  └─ Output: Top 5 most relevant chunks                          │
+    └───────────────────┬──────────────────────────────────────────────┘
+                        │
+                        │ Reranked top-K nodes
+                        ▼
+    ┌──────────────────────────────────────────────────────────────────┐
+    │  Context Assembly & Prompt Construction                          │
+    │  ├─ Concatenate top 5 chunks with metadata                      │
+    │  ├─ Build system prompt with instructions                       │
+    │  └─ Construct user prompt: context + question                   │
+    └───────────────────┬──────────────────────────────────────────────┘
+                        │
+                        │ Final prompt
+                        ▼
+    ┌──────────────────────────────────────────────────────────────────┐
+    │  LLM Generation (Gemini/GPT-4)                                   │
+    │  ├─ Model: gemini-1.5-pro or gpt-4-turbo                        │
+    │  ├─ Temperature: 0.3 (factual responses)                        │
+    │  ├─ Max tokens: 1000                                            │
+    │  └─ System role: Educational tutor for social studies           │
+    └───────────────────┬──────────────────────────────────────────────┘
+                        │
+                        │ Generated answer
+                        ▼
+    ┌──────────────────────────────────────────────────────────────────┐
+    │  Response Packaging                                              │
+    │  {                                                               │
+    │    "answer": "台灣的民主化過程...",                              │
+    │    "sources": [                                                  │
+    │      {                                                           │
+    │        "subject": "History",                                     │
+    │        "level": "L2",                                            │
+    │        "filename": "taiwan_history_ch3.txt",                     │
+    │        "preview": "民國76年解除戒嚴，開放黨禁報禁...",            │
+    │        "relevance_score": 0.92                                   │
+    │      }, ...                                                      │
+    │    ]                                                             │
+    │  }                                                               │
+    └───────────────────┬──────────────────────────────────────────────┘
+                        │
+                        │ JSON response
+                        ▼
+    ┌──────────────────────────────────────────────────────────────────┐
+    │  Frontend Display (React)                                        │
+    │  ├─ Render answer in chat bubble                                │
+    │  └─ Display source references below answer                      │
+    └──────────────────────────────────────────────────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    PHASE 3: ANALYTICS PIPELINE (Teacher)                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+    ┌──────────────────────────────────────────────────────────────────┐
+    │  Query Logging Database (SQLite/PostgreSQL)                      │
+    │  Table: student_queries                                          │
+    │  ├─ id (PRIMARY KEY)                                             │
+    │  ├─ question (TEXT)                                              │
+    │  ├─ timestamp (DATETIME)                                         │
+    │  ├─ session_id (VARCHAR)                                         │
+    │  └─ subject_detected (VARCHAR, optional)                         │
+    └───────────────────┬──────────────────────────────────────────────┘
+                        │
+                        │ Teacher accesses dashboard
+                        ▼
+    ┌──────────────────────────────────────────────────────────────────┐
+    │  Teacher Dashboard Backend                                       │
+    │  ├─ /api/teacher/queries - Fetch all queries                    │
+    │  ├─ /api/teacher/statistics - Aggregate stats                   │
+    │  │   └─ Queries per day/week/month                              │
+    │  ├─ /api/teacher/keywords - Extract common keywords             │
+    │  │   └─ NLP processing (jieba for Chinese)                      │
+    │  └─ /api/teacher/search - Search/filter queries                 │
+    └───────────────────┬──────────────────────────────────────────────┘
+                        │
+                        │ Analytics data
+                        ▼
+    ┌──────────────────────────────────────────────────────────────────┐
+    │  Teacher Dashboard UI (React)                                    │
+    │  ├─ Query table with sorting & filtering                        │
+    │  ├─ Time series chart (queries over time)                       │
+    │  ├─ Word cloud (common topics)                                  │
+    │  ├─ Subject distribution pie chart                              │
+    │  └─ Export to CSV functionality                                 │
+    └──────────────────────────────────────────────────────────────────┘
+```
+
+**7.2. Key Design Decisions**
+
+1. **Hybrid Retrieval Strategy**
+   - **Vector Search (70%):** Captures semantic meaning, handles paraphrasing
+   - **BM25 (30%):** Ensures exact keyword matches aren't missed
+   - **Rationale:** Combines the best of both approaches for educational content
+
+2. **Reranking Layer**
+   - **Purpose:** Cross-encoder models are more accurate than bi-encoders for final ranking
+   - **Benefit:** Reduces false positives, improves answer quality
+   - **Trade-off:** Adds ~200ms latency but significantly improves relevance
+
+3. **Metadata Preservation**
+   - Store subject, level, and filename with each chunk
+   - Enables source attribution and credibility
+   - Helps students verify information and teachers understand content coverage
+
+4. **Query Logging for Pedagogy**
+   - Every question logged in real-time
+   - No PII (personally identifiable information) stored
+   - Enables data-driven teaching insights
+
+5. **Modular LLM Integration**
+   - Abstract LLM layer supports multiple providers
+   - Easy to switch between Gemini/GPT-4 based on cost/performance
+   - Future-proof for new models
+
+**7.3. Performance Targets**
+
+| Metric | Target | Notes |
+|--------|--------|-------|
+| Query latency (p95) | < 3 seconds | From question submit to answer display |
+| Retrieval precision@5 | > 0.85 | At least 4/5 retrieved chunks relevant |
+| Answer accuracy | > 90% | Manual evaluation on test set |
+| Concurrent users | 50+ | Without performance degradation |
+| Database size | ~500MB | For 3 subjects × 2 years of textbooks |
+
+**7.4. Security & Privacy Considerations**
+
+1. **Data Protection**
+   - No student names or personal data collected
+   - Session IDs are anonymized UUIDs
+   - Teacher dashboard requires authentication (future enhancement)
+
+2. **API Security**
+   - API keys stored in environment variables, never in code
+   - Rate limiting on endpoints to prevent abuse
+   - Input validation and sanitization on all user inputs
+
+3. **CORS Configuration**
+   - Restrict allowed origins in production
+   - Enable credentials only for authenticated routes

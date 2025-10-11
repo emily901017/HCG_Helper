@@ -10,7 +10,7 @@ import os
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from engine import RAGEngine
+from rag.engine import RAGEngine
 from database import QueryLogger
 import uuid
 
@@ -101,6 +101,78 @@ def health_check():
         "status": "healthy",
         "engine_initialized": rag_engine is not None
     }), 200
+
+
+@app.route('/api/chat/clear-memory', methods=['POST'])
+def clear_memory():
+    """
+    Clear conversation memory for a session
+
+    Request body:
+    {
+        "session_id": str (optional - if not provided, clears all)
+    }
+
+    Response:
+    {
+        "message": str
+    }
+    """
+    try:
+        data = request.get_json()
+        session_id = data.get('session_id') if data else None
+
+        if rag_engine is None:
+            return jsonify({"error": "RAG engine not initialized"}), 503
+
+        rag_engine.clear_conversation_memory(session_id)
+
+        return jsonify({
+            "message": f"Conversation memory cleared for session {session_id}" if session_id else "All conversation memory cleared"
+        }), 200
+
+    except Exception as e:
+        print(f"Error clearing memory: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/chat/history', methods=['POST'])
+def get_history():
+    """
+    Get conversation history for a session
+
+    Request body:
+    {
+        "session_id": str
+    }
+
+    Response:
+    {
+        "history": [
+            {
+                "role": str,
+                "content": str
+            }
+        ]
+    }
+    """
+    try:
+        data = request.get_json()
+        session_id = data.get('session_id')
+
+        if not session_id:
+            return jsonify({"error": "Session ID is required"}), 400
+
+        if rag_engine is None:
+            return jsonify({"error": "RAG engine not initialized"}), 503
+
+        history = rag_engine.get_conversation_history(session_id)
+
+        return jsonify({"history": history}), 200
+
+    except Exception as e:
+        print(f"Error getting history: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 # Teacher Dashboard Endpoints

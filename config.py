@@ -26,10 +26,17 @@ QUERY_LOG_DB = "query_logs.db"
 CHUNK_SIZE = 512
 CHUNK_OVERLAP = 50
 TOP_K_RETRIEVAL = 10
-TOP_K_RERANK = 3
+TOP_K_RERANK = 5
 
 VECTOR_WEIGHT = 0.7
 BM25_WEIGHT = 0.3
 
 # Embedding Model
 EMBEDDING_MODEL = "text-embedding-3-small"
+
+# Reranker Configuration
+RERANKER_TYPE = os.getenv("RERANKER_TYPE", "cohere")  # Options: "cohere" or "qwen"
+USE_FLASH_ATTENTION = False  # Set to True if using CUDA GPU with flash attention support (Qwen only)
+
+# Conversation Memory Configuration
+MAX_MEMORY_ROUNDS = int(os.getenv("MAX_MEMORY_ROUNDS", "3"))  # Maximum conversation rounds to keep (1 round = user + assistant)
